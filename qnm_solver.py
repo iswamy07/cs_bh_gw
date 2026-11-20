@@ -59,7 +59,7 @@ def zerilli_solver(
 
         tau_min = 0
         tau_max = np.arccos(M/np.sqrt(M**2 + E**2))
-        tau = np.linspace(tau_min, tau_max * (1.0 - 1e-9), 1000)
+        tau = np.linspace(tau_min, tau_max * (1.0 - 1e-9), Nt)
 
 
         d = (np.sqrt(M**2 + E**2) - M) / E
@@ -135,8 +135,6 @@ def zerilli_solver(
 
         B_l = K_1 * (2 * r_i**2 * f**2)/(gamma + 2)
 
-        # Initial conditions
-
         r_s0 = string_pos(0, t, r)
         S_even = A_l*del_r(r_i, r_s0, sigma) - B_l*del_p_r(r_i, r_s0,sigma)
         S = -f*S_even
@@ -148,7 +146,7 @@ def zerilli_solver(
         psi_prev = psi_curr.copy()
         psi_curr = psi_next.copy()
 
-        psi_ext = np.zeros((nummodes, Nt, len(obs_idx)))
+        psi_ext = np.zeros((nummodes, Nt, len(obs_idx)), dtype=np.float32)
         
         wave_snapshots = {}
 
@@ -159,12 +157,23 @@ def zerilli_solver(
         for n in range(Nt):
 
             t_current = n*dt
-            r_s = string_pos(t_current, t, r)
-            
-            
-            S_even = A_l*del_r(r_i, r_s, sigma) - B_l*del_p_r(r_i, r_s,sigma)
-            S = -f*S_even
-            
+            #r_s = string_pos(t_current, t, r)
+                        
+            #S_even = A_l*del_r(r_i, r_s, sigma) - B_l*del_p_r(r_i, r_s,sigma)
+            #S = -f*S_even
+                       
+            if t_current <= t[-1]:
+                r_s = string_pos(t_current, t, r)
+                S_even = (A_l * del_r(r_i, r_s, sigma) - B_l * del_p_r(r_i, r_s, sigma))
+                S = -f * S_even
+                for target in target_rs_values:
+                                if target not in wave_snapshots and r_s <= target:
+                                    wave_snapshots[target] = (r_s, psi_curr.copy())
+            else:
+                # After the string crosses the horizon, source is zero, 
+                # but the black hole continues to ring!
+                S = np.zeros_like(psi_curr)
+
             d2psi_drstar2 = (
             psi_curr[:, 2:] - 2 * psi_curr[:, 1:-1] + psi_curr[:, :-2]) / dr_star**2
                 
@@ -180,9 +189,7 @@ def zerilli_solver(
             psi_ext[:, n, :] = psi_curr[:, obs_idx]
             psi_prev = psi_curr.copy()
             psi_curr = psi_next.copy()
-            for target in target_rs_values:
-                if target not in wave_snapshots and r_s <= target:
-                    wave_snapshots[target] = (r_s, psi_curr.copy())
+            
 
         results.append({
             "M": M,
